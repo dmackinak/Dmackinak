@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Backend runtime data
+backend/uploads/
+backend/clips/
+backend/settings.json
+
+# Frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Models cache
+.cache/
+*.hf/
+
+# Misc
+.DS_Store
+*.env
