@@ -3,22 +3,17 @@ import json
 import os
 import shutil
 
-# Use the static ffmpeg binary from imageio_ffmpeg if system ffmpeg not available
-def _get_ffmpeg():
+# Locate the ffmpeg binary (imageio_ffmpeg ships a static build)
+def _get_ffmpeg() -> str:
     if shutil.which("ffmpeg"):
-        return "ffmpeg", "ffprobe"
+        return "ffmpeg"
     try:
         import imageio_ffmpeg
-        exe = imageio_ffmpeg.get_ffmpeg_exe()
-        # ffprobe is in the same dir for static builds
-        probe = os.path.join(os.path.dirname(exe), "ffprobe-linux-x86_64-v7.0.2")
-        if not os.path.exists(probe):
-            probe = exe  # fallback
-        return exe, probe
+        return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:
-        return "ffmpeg", "ffprobe"
+        return "ffmpeg"
 
-FFMPEG_BIN, FFPROBE_BIN = _get_ffmpeg()
+FFMPEG_BIN = _get_ffmpeg()
 
 
 def run_ffmpeg(*args):
@@ -29,29 +24,27 @@ def run_ffmpeg(*args):
     return result
 
 
-def get_video_info(path: str) -> dict:
-    cmd = [FFPROBE_BIN, "-v", "quiet", "-print_format", "json",
-           "-show_format", "-show_streams", path]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        # Try ffmpeg as ffprobe fallback
-        cmd2 = [FFMPEG_BIN, "-v", "quiet", "-print_format", "json",
-                "-show_format", "-show_streams", path]
-        result = subprocess.run(cmd2, capture_output=True, text=True)
-    return json.loads(result.stdout)
+def _probe_with_av(path: str) -> dict:
+    """Use PyAV to read container metadata — no ffprobe binary needed."""
+    import av
+    with av.open(path) as container:
+        duration = float(container.duration) / 1_000_000  # microseconds → seconds
+        width, height = 1920, 1080
+        for stream in container.streams:
+            if stream.type == "video":
+                width = stream.width
+                height = stream.height
+                break
+        return {"duration": duration, "width": width, "height": height}
 
 
 def get_video_duration(path: str) -> float:
-    data = get_video_info(path)
-    return float(data["format"]["duration"])
+    return _probe_with_av(path)["duration"]
 
 
 def get_video_dimensions(path: str) -> tuple:
-    data = get_video_info(path)
-    for stream in data.get("streams", []):
-        if stream.get("codec_type") == "video":
-            return stream["width"], stream["height"]
-    return 1920, 1080
+    info = _probe_with_av(path)
+    return info["width"], info["height"]
 
 
 def extract_clip(input_path: str, output_path: str, start: float, end: float):

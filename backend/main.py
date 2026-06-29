@@ -177,10 +177,21 @@ def get_clip(job_id: str, clip_name: str):
     return FileResponse(clip_path, media_type="video/mp4", filename=safe_name)
 
 
-# ── Serve built frontend ───────────────────────────────────────────────────────
+# ── Serve built frontend (SPA-aware) ──────────────────────────────────────────
 FRONTEND_DIST = os.path.join(BASE_DIR, "..", "frontend", "dist")
-if os.path.exists(FRONTEND_DIST):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="static")
+_ASSETS_DIR = os.path.join(FRONTEND_DIST, "assets")
+
+if os.path.exists(_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Serve index.html for all non-API routes so React Router works."""
+    index = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index):
+        return FileResponse(index)
+    raise HTTPException(404, "Frontend not built. Run: cd frontend && npm run build")
 
 
 if __name__ == "__main__":
